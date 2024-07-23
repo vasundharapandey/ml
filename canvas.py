@@ -17,7 +17,7 @@ points = {Color.BLUE: [deque(maxlen=1024)], Color.GREEN: [deque(maxlen=1024)], C
 index = {Color.BLUE: 0, Color.GREEN: 0, Color.RED: 0, Color.YELLOW: 0}
 
 # The kernel to be used for dilation purpose 
-kernel = np.ones((5,5),np.uint8)
+kernel = np.ones((5, 5), np.uint8)
 
 colors = {Color.BLUE: (255, 0, 0), Color.GREEN: (0, 255, 0), Color.RED: (0, 0, 255), Color.YELLOW: (0, 255, 255)}
 selected_colors = []
@@ -57,6 +57,13 @@ def draw_buttons(frame):
         cv2.putText(frame, text, (start[0]+10, 33), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_AA)
     return frame
 
+def highlight_selected_colors(frame):
+    button_positions = {Color.BLUE: (160, 1, 255, 65), Color.GREEN: (275, 1, 370, 65), Color.RED: (390, 1, 485, 65), Color.YELLOW: (505, 1, 600, 65)}
+    for color in selected_colors:
+        x1, y1, x2, y2 = button_positions[color]
+        frame = cv2.rectangle(frame, (x1, y1), (x2, y2), colors[color], 2)
+    return frame
+
 def blend_colors(color1, color2):
     blended_color = tuple(map(lambda x: int((x[0] + x[1]) / 2), zip(color1, color2)))
     return blended_color
@@ -79,13 +86,17 @@ def handle_landmarks(landmarks, frame):
             paintWindow[67:, :, :] = 255
             selected_colors = []
         elif 160 <= center[0] <= 255:
-            selected_colors.append(Color.BLUE)
+            if Color.BLUE not in selected_colors:
+                selected_colors.append(Color.BLUE)
         elif 275 <= center[0] <= 370:
-            selected_colors.append(Color.GREEN)
+            if Color.GREEN not in selected_colors:
+                selected_colors.append(Color.GREEN)
         elif 390 <= center[0] <= 485:
-            selected_colors.append(Color.RED)
+            if Color.RED not in selected_colors:
+                selected_colors.append(Color.RED)
         elif 505 <= center[0] <= 600:
-            selected_colors.append(Color.YELLOW)
+            if Color.YELLOW not in selected_colors:
+                selected_colors.append(Color.YELLOW)
         if len(selected_colors) > 2:
             selected_colors = selected_colors[-2:]
     else:
@@ -93,9 +104,10 @@ def handle_landmarks(landmarks, frame):
             points[selected_colors[0]][index[selected_colors[0]]].appendleft(center)
         elif len(selected_colors) == 2:
             blended_color = blend_colors(colors[selected_colors[0]], colors[selected_colors[1]])
+            cv2.circle(frame, center, 3, blended_color, -1)
+            cv2.circle(paintWindow, center, 3, blended_color, -1)
             points[selected_colors[0]][index[selected_colors[0]]].appendleft(center)
             points[selected_colors[1]][index[selected_colors[1]]].appendleft(center)
-            cv2.circle(paintWindow, center, 5, blended_color, -1)
 
 def draw_lines(frame):
     for color in Color:
@@ -103,8 +115,12 @@ def draw_lines(frame):
             for j in range(1, len(points[color][i])):
                 if points[color][i][j - 1] is None or points[color][i][j] is None:
                     continue
-                cv2.line(frame, points[color][i][j - 1], points[color][i][j], colors[color], 2)
-                cv2.line(paintWindow, points[color][i][j - 1], points[color][i][j], colors[color], 2)
+                if len(selected_colors) == 2:
+                    blended_color = blend_colors(colors[selected_colors[0]], colors[selected_colors[1]])
+                else:
+                    blended_color = colors[color]
+                cv2.line(frame, points[color][i][j - 1], points[color][i][j], blended_color, 2)
+                cv2.line(paintWindow, points[color][i][j - 1], points[color][i][j], blended_color, 2)
 
 while True:
     ret, frame = cap.read()
@@ -114,6 +130,7 @@ while True:
     frame = cv2.flip(frame, 1)
     framergb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     frame = draw_buttons(frame)
+    frame = highlight_selected_colors(frame)
 
     result = hands.process(framergb)
     if result.multi_hand_landmarks:
